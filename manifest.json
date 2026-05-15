@@ -1,0 +1,10 @@
+{
+  "name":"Nargile POS Pro",
+  "short_name":"Nargile POS",
+  "start_url":"./index.html",
+  "display":"standalone",
+  "background_color":"#070b16",
+  "theme_color":"#0B1020",
+  "description":"Online POS system for two-branch nargile shop",
+  "icons":[]
+}
