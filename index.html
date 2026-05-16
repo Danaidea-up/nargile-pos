@@ -1,1 +1,125 @@
-<!doctype html><html><head><meta charset="UTF-8"><title>Nargile POS V10</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body><h1>Nargile POS V10</h1><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="ku" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nargile POS V11</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<section id="authScreen" class="auth-screen">
+  <div class="auth-card glass fade-in">
+    <div class="brand-logo">NP</div>
+    <h1>Nargile POS V11</h1>
+    <p>Cloud POS • Multi Branch • Auto Employee Auth</p>
+    <input id="email" type="text" placeholder="Username or Email">
+    <input id="password" type="password" placeholder="Password">
+    <button class="primary full" onclick="signIn()">Login</button>
+    <small>Real Login: username zana یان email ـی Supabase Auth</small>
+  </div>
+</section>
+
+<main id="app" class="app hidden">
+  <aside id="sidebar" class="sidebar">
+    <div class="side-head">
+      <div class="brand small">
+        <div class="brand-logo mini">NP</div>
+        <div>
+          <h2>Nargile POS</h2>
+          <small id="profileRole">role</small>
+        </div>
+      </div>
+      <button class="icon-btn" onclick="toggleMenu()">☰</button>
+    </div>
+
+    <div class="profile-box">
+      <b id="profileName">User</b>
+      <select id="branchSelect" onchange="switchBranch()">
+        <option value="1">لقی ١</option>
+        <option value="2">لقی ٢</option>
+      </select>
+    </div>
+
+    <nav id="nav" class="menu-nav"></nav>
+    <button class="ghost full" onclick="signOut()">Logout</button>
+  </aside>
+
+  <section class="content">
+    <header class="topbar">
+      <button class="hamburger" onclick="toggleMenu()">☰</button>
+      <div>
+        <h1 id="pageTitle">داشبۆرد</h1>
+        <p>Cloud POS with branch-based permissions</p>
+      </div>
+      <input id="search" placeholder="Search..." oninput="renderAll()">
+      <select id="langSelect" onchange="setLang(this.value)">
+        <option value="ku">کوردی</option>
+        <option value="en">English</option>
+        <option value="ar">العربية</option>
+      </select>
+    </header>
+
+    <section id="dashboard" class="page active">
+      <div class="stats">
+        <div class="stat"><span>کۆی فرۆشتن</span><strong id="statSales">0 IQD</strong></div>
+        <div class="stat"><span>قازانج</span><strong id="statProfit">0 IQD</strong></div>
+        <div class="stat"><span>کاڵا</span><strong id="statProducts">0</strong></div>
+        <div class="stat"><span>مۆظەف</span><strong id="statEmployees">0</strong></div>
+      </div>
+      <div class="panel"><h3>Activity</h3><div id="activityList" class="list"></div></div>
+    </section>
+
+    <section id="pos" class="page">
+      <div class="grid two">
+        <div class="panel"><h3>فرۆشتن</h3><div id="productGrid" class="product-grid"></div></div>
+        <div class="panel"><h3>Cart</h3><div id="cartList" class="list"></div><div class="total"><b id="cartTotal">0 IQD</b></div><button class="primary full" onclick="checkout()">Checkout</button></div>
+      </div>
+    </section>
+
+    <section id="products" class="page">
+      <div class="panel">
+        <h3>کاڵاکان</h3>
+        <div class="form-grid">
+          <input id="pName" placeholder="ناوی کاڵا">
+          <input id="pPrice" type="number" placeholder="نرخ IQD">
+          <input id="pCost" type="number" placeholder="Cost IQD">
+          <input id="pStock" type="number" placeholder="Stock">
+        </div>
+        <button class="primary" onclick="addProduct()">زیادکردنی کاڵا</button>
+      </div>
+      <div class="panel"><div id="productsList" class="list"></div></div>
+    </section>
+
+    <section id="employees" class="page">
+      <div class="panel">
+        <h3>Admin: زیادکردنی مۆظەف بۆ لقەکان</h3>
+        <p class="hint">کاتێک مۆظەف زیاد دەکەیت، Auth user + profile + employee بەخۆکار دروست دەبێت.</p>
+        <div class="form-grid">
+          <input id="empName" placeholder="ناوی مۆظەف">
+          <input id="empEmail" placeholder="Email بۆ Login">
+          <input id="empPassword" type="password" placeholder="Password">
+          <select id="empRole"><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="warehouse">Warehouse</option></select>
+          <select id="empBranch"><option value="1">لقی ١</option><option value="2">لقی ٢</option></select>
+        </div>
+        <button class="primary" onclick="addEmployee()">زیادکردنی مۆظەف</button>
+      </div>
+      <div class="panel"><h3>لیستی مۆظەفەکان</h3><div id="employeesList" class="list"></div></div>
+    </section>
+
+    <section id="customers" class="page"><div class="panel"><h3>کڕیاران</h3><div id="customersList" class="list"></div></div></section>
+    <section id="suppliers" class="page"><div class="panel"><h3>دابینکەرەکان</h3><div id="suppliersList" class="list"></div></div></section>
+    <section id="inventory" class="page"><div class="panel"><h3>گواستنەوەی کۆگا</h3><div id="inventoryList" class="list"></div></div></section>
+    <section id="cash" class="page"><div class="panel"><h3>سندوق</h3><button class="primary">Open Cash Drawer</button></div></section>
+    <section id="tables" class="page"><div class="panel"><h3>مێزەکان</h3><div id="tablesGrid" class="product-grid"></div></div></section>
+    <section id="reports" class="page"><div class="panel"><h3>ڕاپۆرت</h3><p>Analytics and daily report PDF.</p></div></section>
+    <section id="settings" class="page"><div class="panel"><h3>ڕێکخستن</h3><p>Security, language, backup and printer settings.</p></div></section>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
