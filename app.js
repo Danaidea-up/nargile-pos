@@ -1,5 +1,5 @@
 const SUPABASE_URL="https://wukndecvayhuygpxtzcn.supabase.co";
-const SUPABASE_ANON_KEY="PASTE_YOUR_PUBLISHABLE_KEY_HERE";
+const SUPABASE_ANON_KEY="sb_publishable_CmFZBp44Ql4THLVIAkYkUg_pP4R_Wws";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const CREATE_EMPLOYEE_FUNCTION = `${SUPABASE_URL}/functions/v1/create-employee`;
 
