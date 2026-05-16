@@ -19,19 +19,16 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-      return json({ error: "Missing Supabase secrets. Add SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY." }, 500);
+      return json({ error: "Missing Supabase secrets" }, 500);
     }
 
     const authHeader = req.headers.get("Authorization") || "";
-
     const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
+      global: { headers: { Authorization: authHeader } }
     });
-
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: callerData, error: callerError } = await userClient.auth.getUser();
-
     if (callerError || !callerData?.user) {
       return json({ error: "Unauthorized. Admin must be logged in." }, 401);
     }
@@ -47,7 +44,6 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-
     const name = String(body.name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
@@ -58,28 +54,14 @@ serve(async (req) => {
       return json({ error: "Name, email and password are required." }, 400);
     }
 
-    if (password.length < 6) {
-      return json({ error: "Password must be at least 6 characters." }, 400);
-    }
-
-    if (!["admin", "manager", "cashier", "warehouse"].includes(role)) {
-      return json({ error: "Invalid role." }, 400);
-    }
-
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: {
-        full_name: name,
-        role,
-        branch_id
-      }
+      user_metadata: { full_name: name, name, role, branch_id }
     });
 
-    if (createError) {
-      return json({ error: createError.message }, 400);
-    }
+    if (createError) return json({ error: createError.message }, 400);
 
     const userId = created.user.id;
 
@@ -92,9 +74,7 @@ serve(async (req) => {
       branch_id
     }, { onConflict: "id" });
 
-    if (profileError) {
-      return json({ error: "Profile error: " + profileError.message }, 400);
-    }
+    if (profileError) return json({ error: "Profile error: " + profileError.message }, 400);
 
     const { error: employeeError } = await admin.from("employees").insert({
       branch_id,
@@ -103,23 +83,14 @@ serve(async (req) => {
       role
     });
 
-    if (employeeError) {
-      return json({ error: "Employee table error: " + employeeError.message }, 400);
-    }
+    if (employeeError) return json({ error: "Employee table error: " + employeeError.message }, 400);
 
-    return json({
-      success: true,
-      message: "Employee Auth user + profile + employee row created.",
-      user_id: userId
-    });
+    return json({ success: true, user_id: userId, message: "Employee created and can login." });
   } catch (err) {
     return json({ error: String(err?.message || err) }, 500);
   }
 });
 
 function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: corsHeaders
-  });
+  return new Response(JSON.stringify(data), { status, headers: corsHeaders });
 }

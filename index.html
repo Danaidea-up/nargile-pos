@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nargile POS V12</title>
+  <title>Nargile POS V13</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="stylesheet" href="style.css"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div id="toast" class="toast"></div>
+<div id="menuOverlay" class="menu-overlay" onclick="closeMenu()"></div>
 
 <section id="authScreen" class="auth-screen">
   <div class="auth-card glass fade-in">
     <div class="brand-logo">NP</div>
-    <h1>Nargile POS V12</h1>
-    <p>Cloud POS • Multi Branch • API Key Fixed • Auto Employee Auth</p>
+    <h1>Nargile POS V13</h1>
+    <p>Cloud POS • Multi Branch • Menu + Employee Login Fixed</p>
     <input id="email" type="text" placeholder="Username or Email">
     <input id="password" type="password" placeholder="Password">
     <button class="primary full" onclick="signIn()">Login</button>
