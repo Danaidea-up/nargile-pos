@@ -11,43 +11,78 @@ const i18n={
  ar:{appName:"Nargile POS V6",subtitle:"نظام نقاط بيع سحابي",login:"دخول",logout:"خروج"}
 };
 let lang=localStorage.getItem("lang")||"ku";
-let currentUser={id:"demo-admin",name:"Admin",role:"admin",branch_id:1};
+let currentUser={id:null,name:"",role:"cashier",branch_id:1};
 let state={branchId:Number(localStorage.getItem("branchId")||1),page:"dashboard",cart:[],products:[],customers:[],sales:[],saleItems:[],expenses:[],suppliers:[],transfers:[],employees:[],attendance:[],cash:[],tables:[],activity:[]};
 
 const modules=[
- ["dashboard","📊","Dashboard",["admin","manager","cashier","warehouse"]],
- ["pos","🧾","POS",["admin","manager","cashier"]],
- ["products","📦","Products",["admin","manager","warehouse"]],
- ["customers","👥","Customers",["admin","manager","cashier"]],
- ["suppliers","🚚","Suppliers",["admin","manager","warehouse"]],
- ["inventory","🔁","Stock Transfer",["admin","manager","warehouse"]],
- ["employees","🧑‍💼","Employees",["admin","manager"]],
- ["cash","💵","Cash Drawer",["admin","manager","cashier"]],
- ["tables","🪑","Café Tables",["admin","manager","cashier"]],
- ["reports","📈","Reports",["admin","manager"]],
- ["settings","⚙️","Settings",["admin"]]
+ ["dashboard","📊","داشبۆرد",["admin","manager","cashier","warehouse"]],
+ ["pos","🧾","فرۆشتن",["admin","manager","cashier"]],
+ ["products","📦","کاڵاکان",["admin","manager","warehouse"]],
+ ["customers","👥","کڕیاران",["admin","manager","cashier"]],
+ ["suppliers","🚚","کڕین/دابینکەر",["admin","manager","warehouse"]],
+ ["inventory","🔁","گواستنەوەی کۆگا",["admin","manager","warehouse"]],
+ ["employees","🧑‍💼","مۆظەفەکان",["admin"]],
+ ["cash","💵","سندوق",["admin","manager","cashier"]],
+ ["tables","🪑","مێزەکان",["admin","manager","cashier"]],
+ ["reports","📈","ڕاپۆرت",["admin","manager"]],
+ ["settings","⚙️","ڕێکخستن",["admin"]]
 ];
 
-document.addEventListener("DOMContentLoaded",()=>{setLang(lang);document.getElementById("branchSelect").value=state.branchId;renderNav();});
+document.addEventListener("DOMContentLoaded",async ()=>{
+ setLang(lang);
+ document.getElementById("branchSelect").value=state.branchId;
+ renderNav();
+ const {data}=await sb.auth.getUser();
+ if(data?.user){await loadProfile(data.user); startApp();}
+});
 
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
-function money(v){return "$"+Number(v||0).toFixed(2)}
+function money(v){return Number(v||0).toLocaleString("en-US") + " IQD"}
 function val(id){return document.getElementById(id).value.trim()}
 function num(id){return Number(document.getElementById(id).value||0)}
 function clear(ids){ids.forEach(id=>document.getElementById(id).value="")}
 
 function setLang(l){lang=l;localStorage.setItem("lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="en"?"ltr":"rtl";document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=i18n[l][el.dataset.i18n]||el.textContent)}
-function renderNav(){const nav=document.getElementById("nav");nav.innerHTML=modules.filter(m=>m[3].includes(currentUser.role)).map(m=>`<button class="nav ${state.page===m[0]?'active':''}" onclick="showPage('${m[0]}')">${m[1]} ${m[2]}</button>`).join("")}
+function renderNav(){
+ const nav=document.getElementById("nav");
+ nav.innerHTML=modules
+  .filter(m=>m[3].includes(currentUser.role))
+  .map(m=>`<button class="nav ${state.page===m[0]?'active':''}" onclick="showPage('${m[0]}')"><span>${m[1]}</span><b>${m[2]}</b></button>`)
+  .join("");
+}
+
+function normalizeLogin(input){
+ const v = input.trim();
+ if(v.includes("@")) return v;
+ return `${v}@nargile.local`;
+}
 
 async function signIn(){
- const email=val("email"), password=val("password");
- if(!email||!password) return toast("Email/password پێویستە");
+ const loginInput=val("email"), password=val("password");
+ if(!loginInput||!password) return toast("Username/password پێویستە");
+ const email = normalizeLogin(loginInput);
  const {data,error}=await sb.auth.signInWithPassword({email,password});
- if(error){toast("Auth failed؛ Demo Admin بەکاربهێنە یان user دروست بکە"); return;}
- currentUser={id:data.user.id,name:data.user.email,role:"admin",branch_id:1};
+ if(error){toast("Login failed: user لە Supabase Auth دروست بکە"); return;}
+ await loadProfile(data.user);
  startApp();
 }
-function demoLogin(){currentUser={id:"demo-admin",name:"Admin",role:"admin",branch_id:1};startApp()}
+
+async function loadProfile(user){
+ const {data,error}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
+ if(data){
+   currentUser={id:user.id,name:data.full_name||data.username||user.email,role:data.role||"cashier",branch_id:data.branch_id||1};
+ }else{
+   const username = user.email.split("@")[0];
+   const profile={id:user.id,email:user.email,username,full_name:username,role:username==="zana"?"admin":"cashier",branch_id:1};
+   await sb.from("profiles").insert(profile);
+   currentUser={id:user.id,name:profile.full_name,role:profile.role,branch_id:profile.branch_id};
+ }
+ state.branchId = currentUser.role==="admin" ? Number(localStorage.getItem("branchId")||currentUser.branch_id||1) : Number(currentUser.branch_id||1);
+ localStorage.setItem("branchId", state.branchId);
+ document.getElementById("branchSelect").value=String(state.branchId);
+ document.getElementById("branchSelect").disabled = currentUser.role!=="admin";
+}
+
 async function signOut(){try{await sb.auth.signOut()}catch(e){};document.getElementById("app").classList.add("hidden");document.getElementById("authScreen").classList.remove("hidden")}
 async function startApp(){document.getElementById("authScreen").classList.add("hidden");document.getElementById("app").classList.remove("hidden");document.getElementById("profileName").textContent=currentUser.name;document.getElementById("profileRole").textContent=currentUser.role;renderNav();await ensureSetup();await loadAll();subscribeRealtime();}
 
@@ -67,7 +102,10 @@ function subscribeRealtime(){
 }
 
 function showPage(p){state.page=p;document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(p).classList.add("active");document.getElementById("pageTitle").textContent=modules.find(m=>m[0]===p)?.[2]||p;renderNav();renderCurrent()}
-function switchBranch(){state.branchId=Number(val("branchSelect"));localStorage.setItem("branchId",state.branchId);state.cart=[];loadAll();toast("Branch switched")}
+function switchBranch(){
+ if(currentUser.role!=="admin"){document.getElementById("branchSelect").value=String(currentUser.branch_id); return toast("تەنیا Admin دەتوانێت لق بگۆڕێت");}
+ state.branchId=Number(val("branchSelect"));localStorage.setItem("branchId",state.branchId);state.cart=[];loadAll();toast("Branch switched")
+}
 function renderCurrent(){renderDashboard();renderPOS();renderProducts();renderCustomers();renderSuppliers();renderTransfers();renderEmployees();renderCash();renderTables();renderReports();renderSelects()}
 
 function renderDashboard(){
@@ -138,9 +176,24 @@ async function requestTransfer(){const product_id=Number(val("transferProduct"))
 async function approveTransfer(id){await sb.from("stock_transfers").update({status:"approved"}).eq("id",id);await log("transfer_approved",id);loadAll()}
 function renderTransfers(){document.getElementById("transfersList").innerHTML=state.transfers.map(t=>`<div class="item"><div><b>${t.product_name}</b><br><small>${t.quantity} | ${t.status}</small></div><button onclick="approveTransfer(${t.id})">Approve</button></div>`).join("")||"<p>No transfers</p>"}
 
-async function addEmployee(){await sb.from("employees").insert({branch_id:Number(val("empBranch")),name:val("empName"),role:val("empRole")});await log("add_employee",val("empName"));loadAll()}
+async function addEmployee(){
+ if(currentUser.role!=="admin") return toast("تەنیا Admin دەتوانێت مۆظەف زیاد بکات");
+ const name=val("empName"), email=val("empEmail"), password=val("empPassword"), role=val("empRole"), branch_id=Number(val("empBranch"));
+ if(!name||!email||!password) return toast("ناو، email و password پێویستە");
+ await sb.from("employees").insert({branch_id,name,role,email});
+ await sb.from("activity_logs").insert({branch_id:state.branchId,user_id:currentUser.id,action:"add_employee",details:`${name} / ${email} / ${role} / branch ${branch_id}`});
+ clear(["empName","empEmail","empPassword"]);
+ toast("مۆظەف زیاد کرا. ئێستا لە Supabase Auth user بە هەمان email/password دروست بکە.");
+ await loadAll();
+}
 async function clockIn(){await sb.from("attendance").insert({branch_id:state.branchId,user_id:currentUser.id,employee_name:currentUser.name,type:"clock"});await log("attendance","clock");loadAll()}
-function renderEmployees(){document.getElementById("employeesList").innerHTML=state.employees.map(e=>`<div class="item"><b>${e.name}</b><small>${e.role} | B${e.branch_id}</small></div>`).join("")||"<p>No employees</p>"}
+function renderEmployees(){
+ document.getElementById("employeesList").innerHTML=state.employees.map(e=>`
+  <div class="item">
+   <div><b>${e.name}</b><br><small>${e.email||""}</small></div>
+   <div><b>${e.role}</b><br><small>لقی ${e.branch_id}</small></div>
+  </div>`).join("")||"<p>هێشتا مۆظەف نییە</p>"
+}
 
 async function openCashDrawer(){await sb.from("cash_drawers").insert({branch_id:state.branchId,user_id:currentUser.id,opening_cash:num("openingCash"),status:"open"});await log("cash_open",num("openingCash"));loadAll()}
 async function closeCashDrawer(){const latest=state.cash.find(c=>c.status==="open"); if(!latest)return toast("No open drawer"); await sb.from("cash_drawers").update({closing_cash:num("closingCash"),status:"closed",closed_at:new Date().toISOString()}).eq("id",latest.id);await log("cash_close",num("closingCash"));loadAll()}

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nargile POS V6 Ultimate Enterprise</title>
+  <title>Nargile POS V8 Menu IQD</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="stylesheet" href="style.css"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -18,13 +18,12 @@
 <section id="authScreen" class="auth-screen">
   <div class="auth-card">
     <div class="brand">NP</div>
-    <h1 data-i18n="appName">Nargile POS V6</h1>
+    <h1 data-i18n="appName">Nargile POS V8</h1>
     <p data-i18n="subtitle">Ultimate Enterprise Cloud POS</p>
-    <input id="email" type="email" placeholder="Email">
+    <input id="email" type="text" placeholder="Username or Email">
     <input id="password" type="password" placeholder="Password">
     <button onclick="signIn()" data-i18n="login">Login</button>
-    <button class="ghost full" onclick="demoLogin()">Demo Admin</button>
-    <small>Demo fallback: Admin / 1234 | Supabase Auth supported</small>
+    <small>Real Login: username zana یا email ـی Supabase Auth</small>
   </div>
 </section>
 
@@ -32,7 +31,7 @@
   <aside class="sidebar">
     <div class="logo">
       <div class="brand small">NP</div>
-      <div><h2>Nargile POS</h2><span>V6 Ultimate Enterprise</span></div>
+      <div><h2>Nargile POS</h2><span>V8 Menu IQD</span></div>
     </div>
 
     <div class="profile">
@@ -45,7 +44,7 @@
       <option value="2">لقی ٢</option>
     </select>
 
-    <nav id="nav"></nav>
+    <nav id="nav" class="menu-nav"></nav>
     <button class="logout" onclick="signOut()" data-i18n="logout">Logout</button>
   </aside>
 
@@ -69,7 +68,7 @@
 
     <section id="dashboard" class="page active">
       <div class="stats">
-        <div class="stat"><span>Total Sales</span><strong id="dashSales">$0</strong></div>
+        <div class="stat"><span>کۆی فرۆشتن</span><strong id="dashSales">$0</strong></div>
         <div class="stat"><span>Profit</span><strong id="dashProfit">$0</strong></div>
         <div class="stat"><span>Products</span><strong id="dashProducts">0</strong></div>
         <div class="stat"><span>Low Stock</span><strong id="dashLow">0</strong></div>
@@ -92,7 +91,7 @@
           <h3>Cart</h3>
           <div id="cart" class="cart"></div>
           <select id="saleCustomer"></select>
-          <select id="paymentMethod"><option value="cash">Cash</option><option value="card">Card</option><option value="debt">Debt</option></select>
+          <select id="paymentMethod"><option value="cash">Cash</option><option value="card">Card</option><option value="debt">قەرز</option></select>
           <div class="total">Total: <b id="cartTotal">$0</b></div>
           <button class="primary full" onclick="completeSale()">Complete Sale</button>
           <button class="ghost full" onclick="downloadInvoicePDF()">Invoice PDF</button>
@@ -125,8 +124,8 @@
 
     <section id="customers" class="page">
       <div class="panel">
-        <h3>Customers / Debt</h3>
-        <div class="form-grid"><input id="cName" placeholder="Name"><input id="cPhone" placeholder="Phone"><input id="cDebt" type="number" placeholder="Debt"></div>
+        <h3>Customers / قەرز</h3>
+        <div class="form-grid"><input id="cName" placeholder="Name"><input id="cPhone" placeholder="Phone"><input id="cقەرز" type="number" placeholder="قەرز"></div>
         <button class="primary" onclick="addCustomer()">Add Customer</button>
       </div>
       <div class="panel"><div id="customersList" class="list"></div></div>
@@ -152,12 +151,19 @@
 
     <section id="employees" class="page">
       <div class="panel">
-        <h3>Employees / Attendance</h3>
-        <div class="form-grid"><input id="empName" placeholder="Employee"><select id="empRole"><option>admin</option><option>manager</option><option>cashier</option><option>warehouse</option></select><select id="empBranch"><option value="1">Branch 1</option><option value="2">Branch 2</option></select></div>
-        <button class="primary" onclick="addEmployee()">Add Employee</button>
+        <h3>Admin: زیادکردنی مۆظەف بۆ لقەکان</h3>
+        <p class="hint">Admin دەتوانێت مۆظەف زیاد بکات، role بدات، و لق دیاری بکات.</p>
+        <div class="form-grid">
+          <input id="empName" placeholder="ناوی مۆظەف">
+          <input id="empEmail" placeholder="Email بۆ Login">
+          <input id="empPassword" type="password" placeholder="Password">
+          <select id="empRole"><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="warehouse">Warehouse</option></select>
+          <select id="empBranch"><option value="1">لقی ١</option><option value="2">لقی ٢</option></select>
+        </div>
+        <button class="primary" onclick="addEmployee()">زیادکردنی مۆظەف</button>
         <button class="ghost" onclick="clockIn()">Clock In/Out</button>
       </div>
-      <div class="panel"><div id="employeesList" class="list"></div></div>
+      <div class="panel"><h3>لیستی مۆظەفەکان</h3><div id="employeesList" class="list"></div></div>
     </section>
 
     <section id="cash" class="page">
@@ -183,10 +189,10 @@
       <div class="panel">
         <h3>Reports</h3>
         <div class="report-grid">
-          <div>Total Sales: <b id="rSales">$0</b></div>
-          <div>Total Profit: <b id="rProfit">$0</b></div>
-          <div>Expenses: <b id="rExpenses">$0</b></div>
-          <div>Debt: <b id="rDebt">$0</b></div>
+          <div>کۆی فرۆشتن: <b id="rSales">$0</b></div>
+          <div>کۆی قازانج: <b id="rProfit">$0</b></div>
+          <div>خەرجی: <b id="rخەرجی">$0</b></div>
+          <div>قەرز: <b id="rقەرز">$0</b></div>
         </div>
         <button onclick="exportExcel('sales')">Sales Excel</button>
         <button onclick="dailyReportPDF()">Daily PDF</button>
