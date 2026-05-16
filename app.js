@@ -1,43 +1,165 @@
-const SUPABASE_URL = "https://wukndecvayhuygpxtzcn.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_CmFZBp44Ql4THLVIAkYkUg_pP4R_Wws";
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const branches=[{id:1,name:'لقی ١'},{id:2,name:'لقی ٢'}];
-const users=[{name:'Admin',pin:'1234',role:'admin',branchId:'all'},{name:'Cashier Branch 1',pin:'1111',role:'cashier',branchId:1},{name:'Cashier Branch 2',pin:'2222',role:'cashier',branchId:2}];
-let data={products:[],sales:[],customers:[],expenses:[]}, session=null, activeBranch=1, tab='dashboard', cart=[];
-const $=id=>document.getElementById(id); const money=n=>'$'+Number(n||0).toFixed(2); const branchName=id=>id==='all'?'هەموو لقەکان':(branches.find(b=>b.id==id)?.name||id);
-function scoped(arr){return session?.role==='admin'&&activeBranch==='all'?arr:arr.filter(x=>Number(x.branch_id)===Number(activeBranch))}
-function el(h){$('app').innerHTML=h}
-async function initBranches(){for(const b of branches){await db.from('branches').upsert({id:b.id,name:b.name},{onConflict:'id'})}}
-async function loadData(){await initBranches(); let [p,s,c,e]=await Promise.all([db.from('products').select('*').order('id',{ascending:false}),db.from('sales').select('*').order('id',{ascending:false}),db.from('customers').select('*').order('id',{ascending:false}),db.from('expenses').select('*').order('id',{ascending:false})]); if(p.error||s.error||c.error||e.error){alert('کێشەی پەیوەندی بە Supabase. دڵنیابە RLS policies ـەکانت run کردووە.'); console.log(p.error,s.error,c.error,e.error)} data.products=p.data||[];data.sales=s.data||[];data.customers=c.data||[];data.expenses=e.data||[]}
-async function login(){const name=$('loginName').value.trim(),pin=$('pin').value.trim();const u=users.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.pin===pin); if(!u)return alert('ناو یان PIN هەڵەیە'); session=u;activeBranch=u.role==='admin'?1:u.branchId; await loadData(); render()}
-function logout(){session=null;cart=[];renderLogin()}
-function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2400)}
-const tabInfo=[
-  ['dashboard','داشبۆرد','📊'],['pos','فرۆشتن','🧾'],['products','کاڵاکان','📦'],['inventory','کۆگا','🏬'],['customers','کڕیار/قەرز','👥'],['expenses','خەرجی','💸'],['reports','ڕاپۆرت','📈']
+const SUPABASE_URL="https://wukndecvayhuygpxtzcn.supabase.co";
+const SUPABASE_ANON_KEY="sb_publishable_CmFZBp44Ql4THLVIAkYkUg_pP4R_Wws";
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e});
+
+const i18n={
+ ku:{appName:"Nargile POS V6",subtitle:"سیستەمی POS کڵاودی پیشەیی",login:"چوونەژوورەوە",logout:"چوونەدەرەوە"},
+ en:{appName:"Nargile POS V6",subtitle:"Ultimate Enterprise Cloud POS",login:"Login",logout:"Logout"},
+ ar:{appName:"Nargile POS V6",subtitle:"نظام نقاط بيع سحابي",login:"دخول",logout:"خروج"}
+};
+let lang=localStorage.getItem("lang")||"ku";
+let currentUser={id:"demo-admin",name:"Admin",role:"admin",branch_id:1};
+let state={branchId:Number(localStorage.getItem("branchId")||1),page:"dashboard",cart:[],products:[],customers:[],sales:[],saleItems:[],expenses:[],suppliers:[],transfers:[],employees:[],attendance:[],cash:[],tables:[],activity:[]};
+
+const modules=[
+ ["dashboard","📊","Dashboard",["admin","manager","cashier","warehouse"]],
+ ["pos","🧾","POS",["admin","manager","cashier"]],
+ ["products","📦","Products",["admin","manager","warehouse"]],
+ ["customers","👥","Customers",["admin","manager","cashier"]],
+ ["suppliers","🚚","Suppliers",["admin","manager","warehouse"]],
+ ["inventory","🔁","Stock Transfer",["admin","manager","warehouse"]],
+ ["employees","🧑‍💼","Employees",["admin","manager"]],
+ ["cash","💵","Cash Drawer",["admin","manager","cashier"]],
+ ["tables","🪑","Café Tables",["admin","manager","cashier"]],
+ ["reports","📈","Reports",["admin","manager"]],
+ ["settings","⚙️","Settings",["admin"]]
 ];
-function navButtons(cls='nav'){
-  return tabInfo.map(([a,b,i])=>`<button class="${tab===a?'active':''}" onclick="tab='${a}';render()"><span>${i}</span>${cls==='nav'?b:''}</button>`).join('')
+
+document.addEventListener("DOMContentLoaded",()=>{setLang(lang);document.getElementById("branchSelect").value=state.branchId;renderNav();});
+
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
+function money(v){return "$"+Number(v||0).toFixed(2)}
+function val(id){return document.getElementById(id).value.trim()}
+function num(id){return Number(document.getElementById(id).value||0)}
+function clear(ids){ids.forEach(id=>document.getElementById(id).value="")}
+
+function setLang(l){lang=l;localStorage.setItem("lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="en"?"ltr":"rtl";document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=i18n[l][el.dataset.i18n]||el.textContent)}
+function renderNav(){const nav=document.getElementById("nav");nav.innerHTML=modules.filter(m=>m[3].includes(currentUser.role)).map(m=>`<button class="nav ${state.page===m[0]?'active':''}" onclick="showPage('${m[0]}')">${m[1]} ${m[2]}</button>`).join("")}
+
+async function signIn(){
+ const email=val("email"), password=val("password");
+ if(!email||!password) return toast("Email/password پێویستە");
+ const {data,error}=await sb.auth.signInWithPassword({email,password});
+ if(error){toast("Auth failed؛ Demo Admin بەکاربهێنە یان user دروست بکە"); return;}
+ currentUser={id:data.user.id,name:data.user.email,role:"admin",branch_id:1};
+ startApp();
 }
-function renderLogin(){el(`<div class="login-page"><div class="login"><div class="login-logo">N</div><h1>Nargile POS Pro</h1><p class="muted">سیستەمی فرۆشتن و کۆگا — وەشانی ئۆنلاین بە Supabase</p><input id="loginName" value="Admin" placeholder="ناوی بەکارهێنەر"><input id="pin" value="1234" placeholder="PIN" type="password"><button onclick="login()" style="width:100%;margin-top:8px">چوونەژوورەوە</button><div class="hint muted ltr">Admin / 1234<br>Cashier Branch 1 / 1111<br>Cashier Branch 2 / 2222</div></div></div>`)}
-function render(){if(!session)return renderLogin();el(`<div class="app-shell"><aside class="sidebar"><div class="brand"><div class="logo">N</div><div><h1>Nargile POS Pro</h1><p class="muted">International UI</p></div></div><div class="nav">${navButtons('nav')}</div><div class="side-footer"><div class="pill">👤 ${session.name}</div><br><br><div class="muted">${session.role} • ${branchName(activeBranch)}</div><button class="danger" onclick="logout()" style="width:100%;margin-top:12px">دەرچوون</button></div></aside><main class="main"><div class="topbar"><div class="top-title"><div class="logo">N</div><div><b>سیستەمی POS نێرگەلە</b><div class="muted">${branchName(activeBranch)} • Online Cloud Sync</div></div></div><div class="top-actions">${session.role==='admin'?`<select class="branch-select" onchange="activeBranch=this.value==='all'?'all':Number(this.value);cart=[];render()"><option value="1" ${activeBranch===1?'selected':''}>لقی ١</option><option value="2" ${activeBranch===2?'selected':''}>لقی ٢</option><option value="all" ${activeBranch==='all'?'selected':''}>هەموو لقەکان</option></select>`:''}<button class="ghost" onclick="loadData().then(render)">Sync</button></div></div><div id="view">${view()}</div></main><div class="mobile-tabs">${navButtons('mobile')}</div></div>`)}
-function view(){return ({dashboard:dashboard(),pos:pos(),products:products(),inventory:inventory(),customers:customers(),expenses:expenses(),reports:reports()})[tab]}
-function stats(){let s=scoped(data.sales),e=scoped(data.expenses);let sales=s.reduce((a,x)=>a+Number(x.total||0),0), exp=e.reduce((a,x)=>a+Number(x.amount||0),0);return{sales,profit:sales-exp,orders:s.length,exp}}
-function dashboard(){let st=stats(),low=scoped(data.products).filter(p=>Number(p.stock)<=10);return `<div class="section-title"><h2>داشبۆردی گشتی</h2><span class="pill">☁️ Supabase Online</span></div><div class="grid four"><div class="card stat"><div class="icon">💰</div><span class="muted">فرۆشتن</span><h2>${money(st.sales)}</h2></div><div class="card stat"><div class="icon">📈</div><span class="muted">قازانج</span><h2>${money(st.profit)}</h2></div><div class="card stat"><div class="icon">🧾</div><span class="muted">وەسڵ</span><h2>${st.orders}</h2></div><div class="card stat"><div class="icon">💸</div><span class="muted">خەرجی</span><h2>${money(st.exp)}</h2></div></div><br><div class="card"><div class="section-title"><h3>ئاگاداری کۆگای کەم</h3><span class="pill ${low.length?'badge-low':'badge-ok'}">${low.length?low.length+' کەمە':'باشە'}</span></div>${low.length?low.map(p=>`<p class="low">${p.name} - ماوە: ${p.stock} ${p.unit_type}</p>`).join(''):'<p class="ok">هیچ کاڵایەک کەم نییە</p>'}</div>`}
-function pos(){let ps=scoped(data.products).filter(p=>activeBranch!=='all');let total=cart.reduce((a,i)=>a+i.qty*i.sale_price,0);return activeBranch==='all'?'<div class="card">تکایە لقێک هەڵبژێرە بۆ فرۆشتن.</div>':`<div class="pos"><div class="card"><h3>کاڵاکان</h3><input oninput="renderProductsList(this.value)" placeholder="گەڕان"><div id="plist" class="products">${productCards(ps)}</div></div><div class="card"><h3>سەبەتە</h3>${cart.map(i=>`<div class="cart-item"><b>${i.name}</b><span class="qty"><button class="btn2" onclick="changeQty(${i.id},-1)">-</button>${i.qty}<button class="btn2" onclick="changeQty(${i.id},1)">+</button></span><span>${money(i.qty*i.sale_price)}</span></div>`).join('')||'<p class="muted">هیچ کاڵایەک نییە</p>'}<hr><h2>${money(total)}</h2><input id="cust" placeholder="ناوی کڕیار / قەرز"><select id="pay"><option value="cash">cash</option><option value="card">card</option><option value="debt">debt</option></select><button onclick="checkout()">تەواوکردنی فرۆشتن</button><button class="btn2" onclick="cart=[];render()">پاککردنەوە</button></div></div>`}
-function productCards(ps){return ps.map(p=>`<div class="product" onclick="addCart(${p.id})"><b>${p.name}</b><span class="pill">${money(p.sale_price)} / ${p.unit_type}</span><p class="muted">کۆگا: ${p.stock}</p></div>`).join('')}
-function renderProductsList(q){$('plist').innerHTML=productCards(scoped(data.products).filter(p=>activeBranch!=='all'&&p.name.includes(q)))}
-function addCart(id){let p=data.products.find(x=>x.id==id);let qty=p.unit_type==='gram'?50:1;let ex=cart.find(x=>x.id==id);ex?ex.qty+=qty:cart.push({...p,qty});render()}
-function changeQty(id,n){let i=cart.find(x=>x.id==id);if(!i)return;i.qty+=n*(i.unit_type==='gram'?50:1);if(i.qty<=0)cart=cart.filter(x=>x.id!=id);render()}
-async function checkout(){let total=cart.reduce((a,i)=>a+i.qty*i.sale_price,0); if(!cart.length)return alert('سەبەتە بەتاڵە'); for(const i of cart){if(Number(i.stock)<i.qty)return alert('کۆگا بەس نییە: '+i.name)} for(const i of cart){let newStock=Number(i.stock)-i.qty; await db.from('products').update({stock:newStock}).eq('id',i.id)} let pay=$('pay').value,cust=$('cust').value.trim(); let customerId=null; if(pay==='debt'&&cust){let c=data.customers.find(x=>x.name===cust&&Number(x.branch_id)===Number(activeBranch)); if(!c){let r=await db.from('customers').insert({branch_id:activeBranch,name:cust,phone:'',debt:0}).select().single(); c=r.data} customerId=c.id; await db.from('customers').update({debt:Number(c.debt||0)+total}).eq('id',c.id)} await db.from('sales').insert({branch_id:activeBranch,customer_id:customerId,total,payment_method:pay}); cart=[]; await loadData(); toast('فرۆشتن تەواو بوو و لە Supabase هەڵگیرا'); render()}
-function products(){return `<div class="card"><h3>زیادکردنی کاڵا</h3>${activeBranch==='all'?'<p>لقێک هەڵبژێرە</p>':`<div class="grid three"><input id="pn" placeholder="ناوی کاڵا"><input id="pc" placeholder="جۆر"><select id="pu"><option value="piece">دانە</option><option value="gram">گرام</option><option value="kg">کیلۆ</option></select><input id="ps" type="number" placeholder="کۆگا"><input id="pcost" type="number" placeholder="نرخی کڕین"><input id="pprice" type="number" placeholder="نرخی فرۆشتن"></div><button onclick="addProduct()">زیادکردن</button>`}</div><br>${tableProducts()}`}
-async function addProduct(){await db.from('products').insert({branch_id:activeBranch,name:$('pn').value,category:$('pc').value,unit_type:$('pu').value,stock:+$('ps').value,cost_price:+$('pcost').value,sale_price:+$('pprice').value}); await loadData(); render()}
-function tableProducts(){return `<div class="card"><div class="table-wrap"><table class="table"><tr><th>ناو</th><th>لق</th><th>یەکە</th><th>کۆگا</th><th>نرخ</th><th></th></tr>${scoped(data.products).map(p=>`<tr><td>${p.name}</td><td>${branchName(Number(p.branch_id))}</td><td>${p.unit_type}</td><td>${p.stock}</td><td>${money(p.sale_price)}</td><td><button class="danger" onclick="delProduct(${p.id})">سڕینەوە</button></td></tr>`).join('')}</table></div></div>`}
-async function delProduct(id){await db.from('products').delete().eq('id',id); await loadData(); render()}
-function inventory(){return `<div class="card"><h3>کۆگا</h3><div class="table-wrap"><table class="table"><tr><th>کاڵا</th><th>لق</th><th>ماوە</th><th>زیادکردنی کۆگا</th></tr>${scoped(data.products).map(p=>`<tr><td>${p.name}</td><td>${branchName(Number(p.branch_id))}</td><td>${p.stock} ${p.unit_type}</td><td><input id="st${p.id}" type="number" placeholder="بڕ"><button onclick="addStock(${p.id})">زیاد</button></td></tr>`).join('')}</table></div></div>`}
-async function addStock(id){let p=data.products.find(x=>x.id==id),v=+$('st'+id).value; await db.from('products').update({stock:Number(p.stock)+v}).eq('id',id); await loadData(); render()}
-function customers(){return `<div class="card"><h3>کڕیار و قەرز</h3><div class="table-wrap"><table class="table"><tr><th>ناو</th><th>لق</th><th>قەرز</th><th>پارەدان</th></tr>${scoped(data.customers).map(c=>`<tr><td>${c.name}</td><td>${branchName(Number(c.branch_id))}</td><td>${money(c.debt)}</td><td><input id="pay${c.id}" type="number"><button onclick="payDebt(${c.id})">پارەدان</button></td></tr>`).join('')}</table></div></div>`}
-async function payDebt(id){let c=data.customers.find(x=>x.id==id),v=+$('pay'+id).value; await db.from('customers').update({debt:Math.max(0,Number(c.debt)-v)}).eq('id',id); await loadData(); render()}
-function expenses(){return `<div class="card"><h3>خەرجی</h3>${activeBranch==='all'?'لقێک هەڵبژێرە':`<input id="exn" placeholder="ناوی خەرجی"><input id="exa" type="number" placeholder="بڕ"><button onclick="addExpense()">زیادکردن</button>`}<div class="table-wrap"><table class="table"><tr><th>ناو</th><th>بڕ</th><th>لق</th><th>بەروار</th></tr>${scoped(data.expenses).map(e=>`<tr><td>${e.title}</td><td>${money(e.amount)}</td><td>${branchName(Number(e.branch_id))}</td><td>${new Date(e.created_at).toLocaleString()}</td></tr>`).join('')}</table></div></div>`}
-async function addExpense(){await db.from('expenses').insert({branch_id:activeBranch,title:$('exn').value,amount:+$('exa').value}); await loadData(); render()}
-function reports(){let st=stats();return `<div class="grid three"><div class="card"><h3>فرۆشتن</h3><h2>${money(st.sales)}</h2></div><div class="card"><h3>قازانج</h3><h2>${money(st.profit)}</h2></div><div class="card"><h3>قەرز</h3><h2>${money(scoped(data.customers).reduce((a,c)=>a+Number(c.debt||0),0))}</h2></div></div>`}
-renderLogin();
+function demoLogin(){currentUser={id:"demo-admin",name:"Admin",role:"admin",branch_id:1};startApp()}
+async function signOut(){try{await sb.auth.signOut()}catch(e){};document.getElementById("app").classList.add("hidden");document.getElementById("authScreen").classList.remove("hidden")}
+async function startApp(){document.getElementById("authScreen").classList.add("hidden");document.getElementById("app").classList.remove("hidden");document.getElementById("profileName").textContent=currentUser.name;document.getElementById("profileRole").textContent=currentUser.role;renderNav();await ensureSetup();await loadAll();subscribeRealtime();}
+
+async function ensureSetup(){
+ await sb.from("branches").upsert([{id:1,name:"Branch 1"},{id:2,name:"Branch 2"}],{onConflict:"id"});
+}
+async function q(table){const {data,error}=await sb.from(table).select("*").eq("branch_id",state.branchId).order("id",{ascending:false}); if(error){console.warn(table,error); return []} return data||[]}
+async function loadAll(){
+ const [products,customers,sales,saleItems,expenses,suppliers,transfers,employees,attendance,cash,tables,activity]=await Promise.all([
+  q("products"),q("customers"),q("sales"),q("sale_items"),q("expenses"),q("suppliers"),q("stock_transfers"),q("employees"),q("attendance"),q("cash_drawers"),q("reservations"),q("activity_logs")
+ ]);
+ Object.assign(state,{products,customers,sales,saleItems,expenses,suppliers,transfers,employees,attendance,cash,tables,activity});
+ renderCurrent();
+}
+function subscribeRealtime(){
+ sb.channel("pos-live").on("postgres_changes",{event:"*",schema:"public"},()=>loadAll()).subscribe();
+}
+
+function showPage(p){state.page=p;document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(p).classList.add("active");document.getElementById("pageTitle").textContent=modules.find(m=>m[0]===p)?.[2]||p;renderNav();renderCurrent()}
+function switchBranch(){state.branchId=Number(val("branchSelect"));localStorage.setItem("branchId",state.branchId);state.cart=[];loadAll();toast("Branch switched")}
+function renderCurrent(){renderDashboard();renderPOS();renderProducts();renderCustomers();renderSuppliers();renderTransfers();renderEmployees();renderCash();renderTables();renderReports();renderSelects()}
+
+function renderDashboard(){
+ const sales=state.sales.reduce((s,x)=>s+Number(x.total||0),0);
+ const cost=state.saleItems.reduce((s,i)=>s+Number(i.cost_price||0)*Number(i.quantity||0),0);
+ const profit=sales-cost-state.expenses.reduce((s,x)=>s+Number(x.amount||0),0);
+ const low=state.products.filter(p=>Number(p.stock||0)<=Number(p.low_stock||5)).length;
+ ["dashSales","rSales"].forEach(id=>document.getElementById(id)&&(document.getElementById(id).textContent=money(sales)));
+ ["dashProfit","rProfit"].forEach(id=>document.getElementById(id)&&(document.getElementById(id).textContent=money(profit)));
+ document.getElementById("dashProducts").textContent=state.products.length; document.getElementById("dashLow").textContent=low;
+ document.getElementById("activityList").innerHTML=state.activity.slice(0,8).map(a=>`<div class="item"><div><b>${a.action}</b><br><small>${a.created_at||""}</small></div></div>`).join("")||"<p>No activity</p>";
+ drawChart();
+}
+let chart;
+function drawChart(){const c=document.getElementById("salesChart"); if(!c) return; const days=[...Array(7)].map((_,i)=>"D"+(i+1)); const data=[...Array(7)].map((_,i)=>state.sales.filter((s,idx)=>idx%7===i).reduce((a,b)=>a+Number(b.total||0),0)); if(chart)chart.destroy(); chart=new Chart(c,{type:"line",data:{labels:days,datasets:[{label:"Sales",data}]},options:{responsive:true}})}
+
+async function uploadImage(file){
+ if(!file) return "";
+ const path=`products/${Date.now()}-${file.name}`;
+ const {error}=await sb.storage.from("pos-images").upload(path,file,{upsert:true});
+ if(error){toast("Image upload failed؛ bucket pos-images دروست بکە"); return ""}
+ const {data}=sb.storage.from("pos-images").getPublicUrl(path);
+ return data.publicUrl;
+}
+async function addProduct(){
+ let image_url=await uploadImage(document.getElementById("pImage").files[0]);
+ const row={branch_id:state.branchId,name:val("pName"),barcode:val("pBarcode"),category:val("pCategory"),unit_type:val("pUnit"),cost_price:num("pCost"),sale_price:num("pPrice"),stock:num("pStock"),low_stock:num("pLow")||5,image_url};
+ if(!row.name||!row.sale_price) return toast("Name and price required");
+ const {error}=await sb.from("products").insert(row); if(error)return toast(error.message);
+ await log("add_product",row.name); clear(["pName","pBarcode","pCategory","pCost","pPrice","pStock","pLow"]); await loadAll();
+}
+function renderProducts(){
+ const q=val("globalSearch").toLowerCase();
+ document.getElementById("productsTable").innerHTML=state.products.filter(p=>p.name.toLowerCase().includes(q)||String(p.barcode||"").includes(q)).map(p=>`<tr><td>${p.name}</td><td>${p.barcode||""}</td><td>${money(p.sale_price)}</td><td>${p.stock}</td><td><button onclick="deleteRow('products',${p.id})">Delete</button></td></tr>`).join("");
+}
+async function deleteRow(table,id){if(!confirm("Delete?"))return;await sb.from(table).delete().eq("id",id);await log("delete_"+table,id);loadAll()}
+
+function renderPOS(){
+ const q=(document.getElementById("posSearch")?.value||"").toLowerCase();
+ document.getElementById("posProducts").innerHTML=state.products.filter(p=>p.name.toLowerCase().includes(q)||String(p.barcode||"").toLowerCase().includes(q)).map(p=>`<div class="product-card" onclick="addToCart(${p.id})">${p.image_url?`<img src="${p.image_url}">`:""}<b>${p.name}</b><br><small>${p.barcode||""}</small><h3>${money(p.sale_price)}</h3><small>Stock: ${p.stock}</small></div>`).join("");
+ document.getElementById("cart").innerHTML=state.cart.map(i=>`<div class="cart-row"><span>${i.name} × ${i.qty}</span><div><b>${money(i.qty*i.price)}</b><button onclick="removeCart(${i.id})">✕</button></div></div>`).join("")||"<p>Cart empty</p>";
+ document.getElementById("cartTotal").textContent=money(state.cart.reduce((s,i)=>s+i.qty*i.price,0));
+}
+function addToCart(id){const p=state.products.find(x=>x.id===id); if(!p)return; const ex=state.cart.find(x=>x.id===id); if(ex)ex.qty++; else state.cart.push({id:p.id,name:p.name,price:Number(p.sale_price),cost:Number(p.cost_price),qty:1}); renderPOS()}
+function removeCart(id){state.cart=state.cart.filter(x=>x.id!==id);renderPOS()}
+async function completeSale(){
+ if(!state.cart.length)return toast("Cart empty");
+ const total=state.cart.reduce((s,i)=>s+i.qty*i.price,0);
+ const {data,error}=await sb.from("sales").insert({branch_id:state.branchId,customer_id:Number(val("saleCustomer"))||null,total,payment_method:val("paymentMethod"),user_id:currentUser.id}).select().single();
+ if(error)return toast(error.message);
+ const items=state.cart.map(i=>({branch_id:state.branchId,sale_id:data.id,product_id:i.id,product_name:i.name,quantity:i.qty,unit_price:i.price,cost_price:i.cost,total:i.qty*i.price}));
+ await sb.from("sale_items").insert(items);
+ for(const i of state.cart){const p=state.products.find(x=>x.id===i.id); await sb.from("products").update({stock:Number(p.stock||0)-i.qty}).eq("id",i.id)}
+ state.cart=[]; await log("complete_sale",money(total)); notify("Sale completed",money(total)); await loadAll();
+}
+
+function renderSelects(){
+ document.getElementById("saleCustomer").innerHTML='<option value="">No customer</option>'+state.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+ document.getElementById("transferProduct").innerHTML=state.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join("");
+}
+async function addCustomer(){const r={branch_id:state.branchId,name:val("cName"),phone:val("cPhone"),debt:num("cDebt")};if(!r.name)return toast("Name required");await sb.from("customers").insert(r);clear(["cName","cPhone","cDebt"]);await log("add_customer",r.name);loadAll()}
+function renderCustomers(){document.getElementById("customersList").innerHTML=state.customers.map(c=>`<div class="item"><div><b>${c.name}</b><br><small>${c.phone||""}</small></div><b>${money(c.debt)}</b></div>`).join("")||"<p>No customers</p>"}
+
+async function addSupplierPurchase(){const s={branch_id:state.branchId,name:val("sName"),phone:val("sPhone")};const {data}=await sb.from("suppliers").insert(s).select().single();await sb.from("purchases").insert({branch_id:state.branchId,supplier_id:data?.id,title:val("purchaseTitle"),amount:num("purchaseAmount")});clear(["sName","sPhone","purchaseTitle","purchaseAmount"]);await log("purchase",s.name);loadAll()}
+function renderSuppliers(){document.getElementById("suppliersList").innerHTML=state.suppliers.map(s=>`<div class="item"><b>${s.name}</b><small>${s.phone||""}</small></div>`).join("")||"<p>No suppliers</p>"}
+
+async function requestTransfer(){const product_id=Number(val("transferProduct"));const to_branch=Number(val("transferTo"));const product=state.products.find(p=>p.id===product_id);await sb.from("stock_transfers").insert({branch_id:state.branchId,from_branch:state.branchId,to_branch,product_id,product_name:product?.name,quantity:num("transferQty"),status:"pending"});await log("transfer_request",product?.name);loadAll()}
+async function approveTransfer(id){await sb.from("stock_transfers").update({status:"approved"}).eq("id",id);await log("transfer_approved",id);loadAll()}
+function renderTransfers(){document.getElementById("transfersList").innerHTML=state.transfers.map(t=>`<div class="item"><div><b>${t.product_name}</b><br><small>${t.quantity} | ${t.status}</small></div><button onclick="approveTransfer(${t.id})">Approve</button></div>`).join("")||"<p>No transfers</p>"}
+
+async function addEmployee(){await sb.from("employees").insert({branch_id:Number(val("empBranch")),name:val("empName"),role:val("empRole")});await log("add_employee",val("empName"));loadAll()}
+async function clockIn(){await sb.from("attendance").insert({branch_id:state.branchId,user_id:currentUser.id,employee_name:currentUser.name,type:"clock"});await log("attendance","clock");loadAll()}
+function renderEmployees(){document.getElementById("employeesList").innerHTML=state.employees.map(e=>`<div class="item"><b>${e.name}</b><small>${e.role} | B${e.branch_id}</small></div>`).join("")||"<p>No employees</p>"}
+
+async function openCashDrawer(){await sb.from("cash_drawers").insert({branch_id:state.branchId,user_id:currentUser.id,opening_cash:num("openingCash"),status:"open"});await log("cash_open",num("openingCash"));loadAll()}
+async function closeCashDrawer(){const latest=state.cash.find(c=>c.status==="open"); if(!latest)return toast("No open drawer"); await sb.from("cash_drawers").update({closing_cash:num("closingCash"),status:"closed",closed_at:new Date().toISOString()}).eq("id",latest.id);await log("cash_close",num("closingCash"));loadAll()}
+function renderCash(){document.getElementById("cashList").innerHTML=state.cash.map(c=>`<div class="item"><b>${c.status}</b><small>Open ${money(c.opening_cash)} / Close ${money(c.closing_cash)}</small></div>`).join("")||"<p>No drawer</p>"}
+
+async function reserveTable(){await sb.from("reservations").insert({branch_id:state.branchId,table_no:val("tableNo"),customer_name:val("tableCustomer"),reserved_at:val("tableTime"),status:"reserved"});await log("reserve_table",val("tableNo"));loadAll()}
+function renderTables(){document.getElementById("tablesList").innerHTML=state.tables.map(t=>`<div class="table-card"><b>Table ${t.table_no}</b><br><small>${t.customer_name}</small><br><small>${t.reserved_at||""}</small></div>`).join("")||"<p>No reservations</p>"}
+
+function renderReports(){const sales=state.sales.reduce((s,x)=>s+Number(x.total||0),0), expenses=state.expenses.reduce((s,x)=>s+Number(x.amount||0),0), debt=state.customers.reduce((s,x)=>s+Number(x.debt||0),0), cost=state.saleItems.reduce((s,i)=>s+Number(i.cost_price||0)*Number(i.quantity||0),0);document.getElementById("rSales").textContent=money(sales);document.getElementById("rExpenses").textContent=money(expenses);document.getElementById("rDebt").textContent=money(debt);document.getElementById("rProfit").textContent=money(sales-cost-expenses)}
+function exportExcel(type){let data=state[type]||[]; const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,type); XLSX.writeFile(wb,`nargile-${type}.xlsx`)}
+function dailyReportPDF(){const {jsPDF}=window.jspdf; const doc=new jsPDF(); doc.text("Nargile POS Daily Report",20,20); doc.text("Sales: "+document.getElementById("rSales").textContent,20,35); doc.text("Profit: "+document.getElementById("rProfit").textContent,20,50); doc.save("daily-report.pdf")}
+function downloadInvoicePDF(){const {jsPDF}=window.jspdf; const doc=new jsPDF(); doc.text("Nargile POS Invoice",20,20); let y=35; state.cart.forEach(i=>{doc.text(`${i.name} x ${i.qty} = ${money(i.qty*i.price)}`,20,y); y+=10}); doc.text("Total: "+document.getElementById("cartTotal").textContent,20,y+10); doc.save("invoice.pdf")}
+function printThermal(){let html="<h3>Nargile POS</h3>"+state.cart.map(i=>`${i.name} x ${i.qty} = ${money(i.qty*i.price)}<br>`).join("")+"<hr>Total: "+document.getElementById("cartTotal").textContent;let w=open("","_blank","width=300");w.document.write(`<body style="font-family:monospace;width:58mm">${html}<script>print()<\/script></body>`)}
+
+async function addExpense(title,amount){await sb.from("expenses").insert({branch_id:state.branchId,title,amount});loadAll()}
+async function log(action,details){await sb.from("activity_logs").insert({branch_id:state.branchId,user_id:currentUser.id,action,details:String(details||"")})}
+function requestNotificationPermission(){Notification?.requestPermission?.().then(()=>toast("Notifications enabled"))}
+function notify(title,body){if(Notification?.permission==="granted")new Notification(title,{body})}
+function autoBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="nargile-auto-backup.json";a.click()}
+function installPWA(){if(deferredPrompt){deferredPrompt.prompt()}else toast("لە مۆبایل browser menu → Add to Home Screen بکە")}
+function toggleTheme(){document.body.classList.toggle("dark")}
+async function startScanner(){const el=document.getElementById("scanner");el.classList.remove("hidden");const qr=new Html5Qrcode("scanner");try{await qr.start({facingMode:"environment"},{fps:10,qrbox:220},txt=>{document.getElementById("posSearch").value=txt;renderPOS();qr.stop();el.classList.add("hidden")})}catch(e){toast("Camera scanner supported only on HTTPS/live site")}}
