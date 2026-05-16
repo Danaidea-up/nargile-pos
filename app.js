@@ -1,4 +1,12 @@
 
+window.addEventListener("error", (e) => {
+  try { toast("JavaScript error: " + (e.message || "unknown")); } catch(_) { alert("JavaScript error: " + (e.message || "unknown")); }
+});
+window.addEventListener("unhandledrejection", (e) => {
+  try { toast("Error: " + (e.reason?.message || e.reason || "unknown")); } catch(_) { alert("Error: " + (e.reason?.message || e.reason || "unknown")); }
+});
+
+
 function openMenu(){
  const s=document.getElementById("sidebar");
  const o=document.getElementById("menuOverlay");
@@ -48,24 +56,38 @@ function setLang(v){localStorage.setItem("lang",v)}
 function normalizeLogin(input){const v=input.trim(); return v.includes("@")?v:`${v}@nargile.local`}@nargile.local`}
 
 async function signIn(){
- const loginInput=val("email");
- const password=val("password");
- if(!loginInput||!password) return toast("Username/password پێویستە");
+ try{
+   const loginInput = val("email");
+   const password = val("password");
 
- const firstEmail = normalizeLogin(loginInput);
- let {data,error}=await sb.auth.signInWithPassword({email:firstEmail,password});
+   if(!loginInput || !password){
+     toast("تکایە username/email و password بنوسە");
+     return;
+   }
 
- // fallback: if user typed non-email username and it failed, try it as raw email too
- if(error && loginInput.includes("@")===false){
-   const retry = await sb.auth.signInWithPassword({email:loginInput,password});
-   data = retry.data;
-   error = retry.error;
+   toast("Login دەکرێت...");
+
+   const email = normalizeLogin(loginInput);
+
+   const {data,error} = await sb.auth.signInWithPassword({ email, password });
+
+   if(error){
+     toast("Login failed: " + error.message);
+     return;
+   }
+
+   if(!data?.user){
+     toast("Login failed: user نەدۆزرایەوە");
+     return;
+   }
+
+   await loadProfile(data.user);
+   startApp();
+   toast("بە سەرکەوتوویی چوویتە ژوورەوە ✅");
+ }catch(err){
+   console.error(err);
+   toast("Login error: " + (err.message || err));
  }
-
- if(error) return toast("Login failed: "+error.message);
-
- await loadProfile(data.user);
- startApp();
 }
 async function loadProfile(user){
  const {data,error}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
@@ -115,3 +137,31 @@ function showPage(p){
  if(window.innerWidth<921) closeMenu();
 }
 document.addEventListener("DOMContentLoaded",async()=>{document.getElementById("sidebar")?.classList.add("collapsed");const {data}=await sb.auth.getUser();if(data?.user){await loadProfile(data.user);startApp()}else{renderNav()}});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("loginBtn");
+  if(btn){
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      signIn();
+    });
+  }
+
+  const pass = document.getElementById("password");
+  if(pass){
+    pass.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        signIn();
+      }
+    });
+  }
+
+  window.signIn = signIn;
+  window.signOut = signOut;
+  window.toggleMenu = toggleMenu;
+  window.closeMenu = closeMenu;
+  window.openMenu = openMenu;
+  window.addEmployee = addEmployee;
+});
